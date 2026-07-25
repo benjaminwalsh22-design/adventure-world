@@ -27,6 +27,16 @@ export const CITIES: City[] = [
     tagline: 'Gladiators, gelato, and giant puzzles!',
   },
   {
+    id: 'kruger',
+    name: 'Kruger Park',
+    country: 'South Africa',
+    emoji: '🦁',
+    lat: -23.99,
+    lon: 31.55,
+    status: 'open',
+    tagline: 'Lions, elephants, and a wild safari dash!',
+  },
+  {
     id: 'cairo',
     name: 'Cairo',
     country: 'Egypt',

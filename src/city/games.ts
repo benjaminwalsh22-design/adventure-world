@@ -11,6 +11,7 @@ export type GameId =
   | 'jungle_dash'
   | 'reading_quest'
   | 'target_cannon'
+  | 'safari_dash'
 
 export type RewardType = 'sticker' | 'medal' | 'bookmark' | 'coins'
 
@@ -24,6 +25,12 @@ export interface GameDef {
   accent: 'sky' | 'gold' | 'emerald' | 'coral'
   /** false until the game module ships in a later build step */
   playable: boolean
+  /** Which city hubs list this game */
+  cities: string[]
+}
+
+export function gamesForCity(cityId: string): GameDef[] {
+  return GAMES.filter((g) => g.cities.includes(cityId))
 }
 
 export const GAMES: GameDef[] = [
@@ -36,6 +43,7 @@ export const GAMES: GameDef[] = [
     rewardLabel: 'Win 3 in a row → Jungle Sticker',
     accent: 'sky',
     playable: true,
+    cities: ['rome'],
   },
   {
     id: 'puzzle_quest',
@@ -46,6 +54,7 @@ export const GAMES: GameDef[] = [
     rewardLabel: 'Finish puzzles → Coins',
     accent: 'gold',
     playable: false,
+    cities: ['rome'],
   },
   {
     id: 'swim_races',
@@ -56,6 +65,7 @@ export const GAMES: GameDef[] = [
     rewardLabel: 'Win races → Medals',
     accent: 'coral',
     playable: false,
+    cities: ['rome'],
   },
   {
     id: 'jungle_dash',
@@ -66,6 +76,7 @@ export const GAMES: GameDef[] = [
     rewardLabel: 'Finish runs → Animated Stickers',
     accent: 'emerald',
     playable: false,
+    cities: ['rome'],
   },
   {
     id: 'reading_quest',
@@ -76,6 +87,7 @@ export const GAMES: GameDef[] = [
     rewardLabel: 'Finish stories → Bookmarks',
     accent: 'sky',
     playable: false,
+    cities: ['rome'],
   },
   {
     id: 'target_cannon',
@@ -86,5 +98,17 @@ export const GAMES: GameDef[] = [
     rewardLabel: 'Pop targets → Coins',
     accent: 'gold',
     playable: false,
+    cities: ['rome'],
+  },
+  {
+    id: 'safari_dash',
+    name: 'Safari Dash',
+    emoji: '🦒',
+    blurb: 'Run the savanna! Jump rocks, duck branches, reach the waterhole!',
+    rewardType: 'sticker',
+    rewardLabel: 'Finish 3 runs in a row → Animal Sticker',
+    accent: 'emerald',
+    playable: true,
+    cities: ['kruger'],
   },
 ]

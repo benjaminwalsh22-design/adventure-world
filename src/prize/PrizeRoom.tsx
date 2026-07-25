@@ -106,10 +106,13 @@ export function PrizeRoom() {
             {stickers.map((s) => (
               <div
                 key={s.id}
-                className="animate-pop-in flex aspect-square flex-col items-center justify-center rounded-2xl bg-white text-3xl shadow-inner"
+                className="animate-pop-in flex aspect-square flex-col items-center justify-center rounded-2xl bg-white shadow-inner"
                 title={s.name}
               >
-                {stickerEmoji(s.stickerKey)}
+                {/* Animated stickers gently float — earned from Safari Dash */}
+                <span className={s.animated ? 'animate-float text-3xl' : 'text-3xl'}>
+                  {stickerEmoji(s.stickerKey)}
+                </span>
               </div>
             ))}
           </Shelf>

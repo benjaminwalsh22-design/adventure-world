@@ -23,14 +23,34 @@ export const JUNGLE_STICKER_POOL: StickerArt[] = [
   { stickerKey: 'jungle/elephant', emoji: '🐘', name: 'Ellie the Big Elephant', animated: false },
 ]
 
-const ART_BY_KEY = new Map(JUNGLE_STICKER_POOL.map((s) => [s.stickerKey, s]))
+export const SAFARI_STICKER_POOL: StickerArt[] = [
+  { stickerKey: 'safari/giraffe', emoji: '🦒', name: 'Stretch the Giraffe', animated: true },
+  { stickerKey: 'safari/zebra', emoji: '🦓', name: 'Zigzag the Zebra', animated: true },
+  { stickerKey: 'safari/elephant', emoji: '🐘', name: 'Tembo the Elephant', animated: true },
+  { stickerKey: 'safari/lion', emoji: '🦁', name: 'Shumba the Lion', animated: true },
+  { stickerKey: 'safari/rhino', emoji: '🦏', name: 'Rumble the Rhino', animated: true },
+  { stickerKey: 'safari/hippo', emoji: '🦛', name: 'Splash the Hippo', animated: true },
+  { stickerKey: 'safari/springbok', emoji: '🦌', name: 'Bounce the Springbok', animated: true },
+  { stickerKey: 'safari/meerkat', emoji: '🐹', name: 'Peek the Meerkat', animated: true },
+]
+
+const ART_BY_KEY = new Map(
+  [...JUNGLE_STICKER_POOL, ...SAFARI_STICKER_POOL].map((s) => [s.stickerKey, s]),
+)
 
 export function stickerEmoji(stickerKey: string): string {
   return ART_BY_KEY.get(stickerKey)?.emoji ?? '🦜'
 }
 
-/** Deterministic next sticker: walk the pool in order, cycling when a
- *  collector has earned them all (dupes only after a full set). */
+/** Deterministic next sticker from a pool: walk it in order based on how
+ *  many from THAT pool are already owned — no dupes until a full set. */
+export function nextStickerFromPool(pool: StickerArt[], ownedKeys: string[]): StickerArt {
+  const poolKeys = new Set(pool.map((s) => s.stickerKey))
+  const ownedFromPool = ownedKeys.filter((k) => poolKeys.has(k)).length
+  return pool[ownedFromPool % pool.length]
+}
+
+/** Back-compat helper used by Matching Builder */
 export function nextJungleSticker(ownedCount: number): StickerArt {
   return JUNGLE_STICKER_POOL[ownedCount % JUNGLE_STICKER_POOL.length]
 }

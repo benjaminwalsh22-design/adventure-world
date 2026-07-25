@@ -1,0 +1,351 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { RunResult } from './SafariEngine'
+import { getRunConfig, SafariEngine } from './SafariEngine'
+import { Button3D } from '../../components/ui/Button3D'
+import type { RewardBannerData } from '../../components/ui/RewardBanner'
+import { useProgressStore } from '../../state/useProgressStore'
+import { useRewardsStore } from '../../state/useRewardsStore'
+import { nextStickerFromPool, SAFARI_STICKER_POOL } from '../../prize/stickerArt'
+import type { StickerArt } from '../../prize/stickerArt'
+import { haptic } from '../../lib/haptics'
+import { playSfx } from '../../lib/sfx'
+
+interface GameScreenProps {
+  onExit: () => void
+  onReward: (banner: RewardBannerData) => void
+}
+
+const STREAK_TARGET = 3
+
+interface RunOutcome {
+  result: RunResult
+  stars: 1 | 2 | 3
+  coins: number
+  displayStreak: number
+  sticker: StickerArt | null
+}
+
+const CONFETTI = ['🎉', '🐾', '🎊', '✨', '🌟', '🦒']
+
+export default function SafariDash({ onExit, onReward }: GameScreenProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const engineRef = useRef<SafariEngine | null>(null)
+  const progressFillRef = useRef<HTMLDivElement>(null)
+  const pawCountRef = useRef<HTMLSpanElement>(null)
+  const heartsRef = useRef<HTMLSpanElement>(null)
+
+  const [level, setLevel] = useState(() => useProgressStore.getState().safariLevel)
+  const [attempt, setAttempt] = useState(1)
+  const [phase, setPhase] = useState<'ready' | 'running' | 'won' | 'failed'>('ready')
+  const [outcome, setOutcome] = useState<RunOutcome | null>(null)
+  const [failResult, setFailResult] = useState<RunResult | null>(null)
+  const storeStreak = useProgressStore((s) => s.safariStreak)
+
+  const handleFinish = useCallback(
+    (result: RunResult): void => {
+      const progress = useProgressStore.getState()
+      const rewards = useRewardsStore.getState()
+
+      const stars = Math.max(3 - result.stumbles, 1) as 1 | 2 | 3
+      const coins = 10 + result.paws + stars * 3 + Math.min(level, 10)
+      rewards.addCoins(coins)
+
+      const streakNow = progress.safariStreak + 1
+      let sticker: StickerArt | null = null
+
+      if (streakNow >= STREAK_TARGET) {
+        sticker = nextStickerFromPool(
+          SAFARI_STICKER_POOL,
+          rewards.stickers.map((s) => s.stickerKey),
+        )
+        rewards.awardSticker({
+          stickerKey: sticker.stickerKey,
+          name: sticker.name,
+          animated: sticker.animated,
+        })
+        onReward({
+          emoji: sticker.emoji,
+          headline: 'New Safari Sticker!',
+          sub: `${sticker.name} joined your Sticker Book`,
+        })
+      } else {
+        playSfx('reward')
+        haptic('success')
+      }
+
+      progress.advanceSafari({ streakAfterRun: sticker ? 0 : streakNow })
+      setOutcome({
+        result,
+        stars,
+        coins,
+        displayStreak: sticker ? STREAK_TARGET : streakNow,
+        sticker,
+      })
+      setPhase('won')
+    },
+    [level, onReward],
+  )
+
+  const handleFail = useCallback((result: RunResult): void => {
+    // Gentle by design: a tumble does NOT break the sticker streak —
+    // only walking away mid-run does. Retry is free.
+    setFailResult(result)
+    setPhase('failed')
+  }, [])
+
+  const handleFinishRef = useRef(handleFinish)
+  handleFinishRef.current = handleFinish
+  const handleFailRef = useRef(handleFail)
+  handleFailRef.current = handleFail
+
+  /* Engine lifecycle: one engine per (level, attempt) */
+  useEffect(() => {
+    const container = containerRef.current
+    const canvas = canvasRef.current
+    if (!container || !canvas) return
+
+    const engine = new SafariEngine(container, canvas, getRunConfig(level), attempt, {
+      onFinish: (r) => handleFinishRef.current(r),
+      onFail: (r) => handleFailRef.current(r),
+    })
+    engine.setHudRefs({
+      progressFill: progressFillRef.current,
+      pawCount: pawCountRef.current,
+      hearts: heartsRef.current,
+    })
+    engineRef.current = engine
+
+    // e2e/test hook — lets an autopilot read upcoming obstacles
+    ;(window as unknown as { __awSafari?: SafariEngine }).__awSafari = engine
+
+    return () => {
+      engine.dispose()
+      engineRef.current = null
+    }
+  }, [level, attempt])
+
+  const startRun = () => {
+    engineRef.current?.start()
+    setPhase('running')
+  }
+
+  const nextRun = () => {
+    setLevel(useProgressStore.getState().safariLevel)
+    setAttempt((a) => a + 1)
+    setOutcome(null)
+    setPhase('ready')
+  }
+
+  const retryRun = () => {
+    setAttempt((a) => a + 1)
+    setFailResult(null)
+    setPhase('ready')
+  }
+
+  const leave = (midRun: boolean) => {
+    if (midRun) useProgressStore.getState().resetSafariStreak()
+    onExit()
+  }
+
+  const streakPips = phase === 'won' && outcome ? outcome.displayStreak : storeStreak
+
+  return (
+    <div
+      ref={containerRef}
+      className="absolute inset-0 z-[55] overflow-hidden bg-[#fde68a]"
+    >
+      <canvas ref={canvasRef} className="block size-full touch-none" aria-label="Safari run" />
+
+      {/* HUD header */}
+      <header className="pt-safe px-safe absolute inset-x-0 top-0 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          aria-label="Back to Kruger Park"
+          onPointerUp={() => leave(phase === 'running')}
+          className="flex size-12 shrink-0 items-center justify-center rounded-full bg-night-navy/60 text-xl text-white backdrop-blur-md active:scale-90"
+        >
+          ◀
+        </button>
+        <div className="flex min-w-0 flex-1 flex-col gap-1 px-1">
+          <div className="flex items-center justify-center gap-2">
+            <span className="rounded-full bg-night-navy/60 px-2.5 py-1 font-display text-base font-bold whitespace-nowrap text-adventure-gold backdrop-blur-md">
+              Run {level}
+            </span>
+            <span
+              ref={heartsRef}
+              className="rounded-full bg-night-navy/60 px-2.5 py-1 text-sm tracking-tighter whitespace-nowrap backdrop-blur-md"
+              aria-label="Stumbles left"
+            >
+              ❤️❤️❤️
+            </span>
+            <span className="rounded-full bg-night-navy/60 px-2.5 py-1 font-display text-base font-bold whitespace-nowrap text-soft-cream backdrop-blur-md">
+              🐾 <span ref={pawCountRef}>0</span>
+            </span>
+          </div>
+          {/* progress to the waterhole */}
+          <div className="h-3 w-full overflow-hidden rounded-full bg-night-navy/30">
+            <div
+              ref={progressFillRef}
+              className="h-full rounded-full bg-emerald-jungle transition-none"
+              style={{ width: '0%' }}
+            />
+          </div>
+        </div>
+        {/* streak pips */}
+        <div
+          className="flex shrink-0 items-center gap-1 rounded-full bg-night-navy/60 px-3 py-2 backdrop-blur-md"
+          aria-label={`${streakPips} of ${STREAK_TARGET} runs toward a sticker`}
+        >
+          {Array.from({ length: STREAK_TARGET }, (_, i) => (
+            <span
+              key={i}
+              className={[
+                'size-3.5 rounded-full',
+                i < streakPips ? 'bg-adventure-gold' : 'bg-white/25',
+              ].join(' ')}
+            />
+          ))}
+          <span className="pl-0.5 text-base" aria-hidden="true">
+            🦒
+          </span>
+        </div>
+      </header>
+
+      {/* Big directional touch buttons */}
+      {phase === 'running' && (
+        <div className="pb-safe px-safe pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-4">
+          <button
+            type="button"
+            aria-label="Duck"
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId)
+              engineRef.current?.duckDown()
+            }}
+            onPointerUp={() => engineRef.current?.duckUp()}
+            onPointerCancel={() => engineRef.current?.duckUp()}
+            className="pointer-events-auto mb-2 flex h-24 w-[42%] flex-col items-center justify-center rounded-3xl bg-ruby-coral font-display text-2xl font-bold text-white shadow-[0_6px_0_var(--color-ruby-coral-edge)] select-none active:translate-y-1.5 active:shadow-none"
+          >
+            <span aria-hidden="true">⬇️</span>
+            DUCK
+          </button>
+          <button
+            type="button"
+            aria-label="Jump"
+            onPointerDown={() => engineRef.current?.jump()}
+            className="pointer-events-auto mb-2 flex h-24 w-[42%] flex-col items-center justify-center rounded-3xl bg-sky-bright font-display text-2xl font-bold text-white shadow-[0_6px_0_var(--color-sky-bright-edge)] select-none active:translate-y-1.5 active:shadow-none"
+          >
+            <span aria-hidden="true">⬆️</span>
+            JUMP
+          </button>
+        </div>
+      )}
+
+      {/* Ready overlay */}
+      {phase === 'ready' && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-night-navy/60 backdrop-blur-sm">
+          <div className="animate-bounce-in mx-6 w-full max-w-sm rounded-[2rem] bg-soft-cream p-6 text-center shadow-2xl">
+            <h2 className="font-display text-3xl font-bold text-night-navy">🦁 Safari Dash</h2>
+            <p className="py-2 text-lg font-bold text-night-navy/70">
+              Run to the waterhole! Grab every 🐾 you can.
+            </p>
+            <div className="flex justify-center gap-6 py-3 text-lg font-bold text-night-navy">
+              <span>
+                ⬆️ JUMP over 🪨 🪵
+              </span>
+              <span>
+                ⬇️ DUCK under 🦅 🌿
+              </span>
+            </div>
+            <Button3D color="emerald" size="xl" block onTap={startRun} ariaLabel="Start running">
+              GO! 🏃
+            </Button3D>
+          </div>
+        </div>
+      )}
+
+      {/* Win overlay */}
+      {phase === 'won' && outcome && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-night-navy/75 backdrop-blur-sm">
+          {Array.from({ length: 18 }, (_, i) => (
+            <span
+              key={i}
+              aria-hidden="true"
+              className="confetti-piece text-2xl"
+              style={{
+                left: `${(i * 137) % 100}%`,
+                animationDuration: `${2.2 + (i % 5) * 0.4}s`,
+                animationDelay: `${(i % 7) * 0.18}s`,
+              }}
+            >
+              {CONFETTI[i % CONFETTI.length]}
+            </span>
+          ))}
+          <div className="animate-bounce-in mx-6 w-full max-w-sm rounded-[2rem] bg-soft-cream p-6 text-center shadow-2xl">
+            <h2 className="font-display text-3xl font-bold text-night-navy">
+              You made it! 🌊
+            </h2>
+            <div className="py-3 text-4xl" role="img" aria-label={`${outcome.stars} out of 3 stars`}>
+              {'⭐'.repeat(outcome.stars)}
+              <span className="opacity-20" aria-hidden="true">
+                {'⭐'.repeat(3 - outcome.stars)}
+              </span>
+            </div>
+            <p className="pb-1 font-display text-2xl font-bold text-adventure-gold">
+              🪙 +{outcome.coins} coins
+            </p>
+            <p className="pb-1 text-base font-bold text-night-navy/60">
+              {outcome.result.meters}m run · 🐾 ×{outcome.result.paws}
+            </p>
+            {outcome.sticker ? (
+              <div className="my-3 rounded-2xl bg-emerald-jungle/15 p-4">
+                <p className="animate-float text-5xl">{outcome.sticker.emoji}</p>
+                <p className="pt-1 font-display text-xl font-bold text-emerald-jungle">
+                  New Safari Sticker!
+                </p>
+                <p className="text-base font-bold text-night-navy/60">{outcome.sticker.name}</p>
+              </div>
+            ) : (
+              <p className="pb-2 text-base font-bold text-night-navy/60">
+                {STREAK_TARGET - outcome.displayStreak} more{' '}
+                {STREAK_TARGET - outcome.displayStreak === 1 ? 'run' : 'runs'} for a Safari
+                Sticker! 🦒
+              </p>
+            )}
+            <div className="flex flex-col gap-3 pt-2">
+              <Button3D color="emerald" size="lg" block onTap={nextRun} ariaLabel="Next run">
+                Next Run ▶
+              </Button3D>
+              <Button3D color="cream" size="md" block onTap={() => leave(false)} ariaLabel="Back to Kruger Park">
+                Back to Kruger Park
+              </Button3D>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fail overlay — warm, zero-stakes retry */}
+      {phase === 'failed' && failResult && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-night-navy/70 backdrop-blur-sm">
+          <div className="animate-bounce-in mx-6 w-full max-w-sm rounded-[2rem] bg-soft-cream p-6 text-center shadow-2xl">
+            <p className="text-5xl">🙈</p>
+            <h2 className="pt-1 font-display text-3xl font-bold text-night-navy">
+              Whoops — big tumble!
+            </h2>
+            <p className="py-2 text-lg font-bold text-night-navy/70">
+              You ran {failResult.meters}m. The waterhole is close — try again!
+            </p>
+            <div className="flex flex-col gap-3 pt-2">
+              <Button3D color="sky" size="lg" block onTap={retryRun} ariaLabel="Try again">
+                Try Again 💪
+              </Button3D>
+              <Button3D color="cream" size="md" block onTap={() => leave(false)} ariaLabel="Back to Kruger Park">
+                Back to Kruger Park
+              </Button3D>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -1,7 +1,7 @@
 import { Modal } from '../components/ui/Modal'
 import type { City } from '../globe/cities'
 import type { GameDef, GameId } from './games'
-import { GAMES } from './games'
+import { gamesForCity } from './games'
 import { haptic } from '../lib/haptics'
 import { playSfx } from '../lib/sfx'
 
@@ -42,7 +42,7 @@ export function CityHubModal({ city, onClose, onPlayGame }: CityHubModalProps) {
         <>
           <p className="pb-4 font-body text-lg font-bold text-night-navy/60">{city.tagline}</p>
           <div className="grid grid-cols-1 gap-3 pb-2">
-            {GAMES.map((game) => (
+            {gamesForCity(city.id).map((game) => (
               <button
                 key={game.id}
                 type="button"

@@ -16,6 +16,11 @@ interface ProgressState {
   matchingStreak: number
   advanceMatching: (opts: { streakAfterRound: number }) => void
   resetMatchingStreak: () => void
+
+  safariLevel: number
+  safariStreak: number
+  advanceSafari: (opts: { streakAfterRun: number }) => void
+  resetSafariStreak: () => void
 }
 
 export const useProgressStore = create<ProgressState>()(
@@ -31,6 +36,17 @@ export const useProgressStore = create<ProgressState>()(
         })),
 
       resetMatchingStreak: () => set({ matchingStreak: 0 }),
+
+      safariLevel: 1,
+      safariStreak: 0,
+
+      advanceSafari: ({ streakAfterRun }) =>
+        set((s) => ({
+          safariLevel: s.safariLevel + 1,
+          safariStreak: streakAfterRun,
+        })),
+
+      resetSafariStreak: () => set({ safariStreak: 0 }),
     }),
     { name: 'aw:progress:v1', version: 1 },
   ),

@@ -15,11 +15,13 @@ import { SettingsOverlay } from './components/SettingsOverlay'
 /* Mini-games are lazy routes — the globe shell stays light and each game
    downloads on first play (then lives in the HTTP cache for offline use). */
 const MatchingBuilder = lazy(() => import('./games/matching/MatchingBuilder'))
+const SafariDash = lazy(() => import('./games/safari/SafariDash'))
 
 const GAME_COMPONENTS: Partial<
   Record<GameId, React.LazyExoticComponent<React.ComponentType<GameScreenProps>>>
 > = {
   matching_builder: MatchingBuilder,
+  safari_dash: SafariDash,
 }
 
 interface GameScreenProps {
