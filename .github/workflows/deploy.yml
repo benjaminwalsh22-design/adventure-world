@@ -1,8 +1,15 @@
 # Adventure World — push-to-deploy pipeline.
 #
 # Every push to main: install → type-check + build → Playwright smoke test
-# against the production bundle → publish to GitHub Pages. A red smoke test
-# blocks the deploy, so the live site only ever receives verified builds.
+# against the production bundle → publish dist/ to the gh-pages branch.
+# A red smoke test blocks the deploy, so the live site only ever receives
+# verified builds.
+#
+# Publishing method: gh-pages BRANCH (not the Pages deployment API). The
+# branch method needs only `contents: write` — which the workflow token
+# always has — and GitHub auto-publishes the gh-pages branch with zero
+# Pages API calls or manual settings. Chosen deliberately after the API
+# path (actions/deploy-pages + enablement) failed on this account.
 
 name: Deploy
 
@@ -12,12 +19,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: deploy
   cancel-in-progress: false
 
 env:
@@ -27,9 +32,6 @@ env:
 jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -50,18 +52,10 @@ jobs:
       - name: Smoke test production bundle
         run: npm run smoke
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
+      - name: Publish dist to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          # Auto-enable GitHub Pages (Actions source) on first deploy —
-          # no manual Settings → Pages step required.
-          enablement: true
-
-      - name: Upload site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true # keep the branch to a single deploy commit
+          commit_message: 'Deploy ${{ github.sha }}'
