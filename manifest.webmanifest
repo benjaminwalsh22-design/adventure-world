@@ -1,0 +1,33 @@
+{
+  "name": "Adventure World",
+  "short_name": "Adventure",
+  "description": "Spin the globe, visit amazing cities, play games, and fill your Trophy Room!",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1E1B4B",
+  "theme_color": "#1E1B4B",
+  "categories": ["education", "games", "kids"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

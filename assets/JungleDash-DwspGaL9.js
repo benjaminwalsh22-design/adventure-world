@@ -1,0 +1,1 @@
+import{s as e}from"./index-CdOwNaVg.js";import{r as t,t as n}from"./themes-letwnqMl.js";var r=e();function i(e){return(0,r.jsx)(t,{...e,theme:n})}export{i as default};
