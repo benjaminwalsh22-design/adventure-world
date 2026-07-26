@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RunResult } from './SafariEngine'
-import { getRunConfig, SafariEngine } from './SafariEngine'
+import type { RunResult } from './DashEngine'
+import { DashEngine, getRunConfig } from './DashEngine'
+import type { DashTheme } from './themes'
 import { Button3D } from '../../components/ui/Button3D'
 import type { RewardBannerData } from '../../components/ui/RewardBanner'
 import { useProgressStore } from '../../state/useProgressStore'
 import { useRewardsStore } from '../../state/useRewardsStore'
-import { nextStickerFromPool, SAFARI_STICKER_POOL } from '../../prize/stickerArt'
+import { nextStickerFromPool } from '../../prize/stickerArt'
 import type { StickerArt } from '../../prize/stickerArt'
 import { haptic } from '../../lib/haptics'
 import { playSfx } from '../../lib/sfx'
 
-interface GameScreenProps {
+export interface GameScreenProps {
   onExit: () => void
   onReward: (banner: RewardBannerData) => void
 }
@@ -25,38 +26,61 @@ interface RunOutcome {
   sticker: StickerArt | null
 }
 
-const CONFETTI = ['🎉', '🐾', '🎊', '✨', '🌟', '🦒']
+/** Theme-keyed progress accessors — one screen serves every dash world. */
+function readProgress(theme: DashTheme): { level: number; streak: number } {
+  const s = useProgressStore.getState()
+  return theme.key === 'safari'
+    ? { level: s.safariLevel, streak: s.safariStreak }
+    : { level: s.jungleLevel, streak: s.jungleStreak }
+}
 
-export default function SafariDash({ onExit, onReward }: GameScreenProps) {
+function advanceProgress(theme: DashTheme, streakAfterRun: number): void {
+  const s = useProgressStore.getState()
+  if (theme.key === 'safari') s.advanceSafari({ streakAfterRun })
+  else s.advanceJungle({ streakAfterRun })
+}
+
+function resetStreak(theme: DashTheme): void {
+  const s = useProgressStore.getState()
+  if (theme.key === 'safari') s.resetSafariStreak()
+  else s.resetJungleStreak()
+}
+
+export default function DashGame({
+  theme,
+  onExit,
+  onReward,
+}: GameScreenProps & { theme: DashTheme }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const engineRef = useRef<SafariEngine | null>(null)
+  const engineRef = useRef<DashEngine | null>(null)
   const progressFillRef = useRef<HTMLDivElement>(null)
   const pawCountRef = useRef<HTMLSpanElement>(null)
   const heartsRef = useRef<HTMLSpanElement>(null)
 
-  const [level, setLevel] = useState(() => useProgressStore.getState().safariLevel)
+  const [level, setLevel] = useState(() => readProgress(theme).level)
   const [attempt, setAttempt] = useState(1)
   const [phase, setPhase] = useState<'ready' | 'running' | 'won' | 'failed'>('ready')
   const [outcome, setOutcome] = useState<RunOutcome | null>(null)
   const [failResult, setFailResult] = useState<RunResult | null>(null)
-  const storeStreak = useProgressStore((s) => s.safariStreak)
+  const storeStreak = useProgressStore((s) =>
+    theme.key === 'safari' ? s.safariStreak : s.jungleStreak,
+  )
 
   const handleFinish = useCallback(
     (result: RunResult): void => {
-      const progress = useProgressStore.getState()
       const rewards = useRewardsStore.getState()
 
       const stars = Math.max(3 - result.stumbles, 1) as 1 | 2 | 3
       const coins = 10 + result.paws + stars * 3 + Math.min(level, 10)
       rewards.addCoins(coins)
 
-      const streakNow = progress.safariStreak + 1
+      const streakNow = readProgress(theme).streak + 1
       let sticker: StickerArt | null = null
 
       if (streakNow >= STREAK_TARGET) {
         sticker = nextStickerFromPool(
-          SAFARI_STICKER_POOL,
+          theme.stickerPool,
           rewards.stickers.map((s) => s.stickerKey),
         )
         rewards.awardSticker({
@@ -66,7 +90,7 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
         })
         onReward({
           emoji: sticker.emoji,
-          headline: 'New Safari Sticker!',
+          headline: theme.stickerBannerTitle,
           sub: `${sticker.name} joined your Sticker Book`,
         })
       } else {
@@ -74,7 +98,7 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
         haptic('success')
       }
 
-      progress.advanceSafari({ streakAfterRun: sticker ? 0 : streakNow })
+      advanceProgress(theme, sticker ? 0 : streakNow)
       setOutcome({
         result,
         stars,
@@ -84,12 +108,11 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
       })
       setPhase('won')
     },
-    [level, onReward],
+    [level, onReward, theme],
   )
 
   const handleFail = useCallback((result: RunResult): void => {
-    // Gentle by design: a tumble does NOT break the sticker streak —
-    // only walking away mid-run does. Retry is free.
+    // A tumble never breaks the sticker streak — only leaving mid-run does.
     setFailResult(result)
     setPhase('failed')
   }, [])
@@ -99,13 +122,12 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
   const handleFailRef = useRef(handleFail)
   handleFailRef.current = handleFail
 
-  /* Engine lifecycle: one engine per (level, attempt) */
   useEffect(() => {
     const container = containerRef.current
     const canvas = canvasRef.current
     if (!container || !canvas) return
 
-    const engine = new SafariEngine(container, canvas, getRunConfig(level), attempt, {
+    const engine = new DashEngine(container, canvas, getRunConfig(level), attempt, theme, {
       onFinish: (r) => handleFinishRef.current(r),
       onFail: (r) => handleFailRef.current(r),
     })
@@ -115,15 +137,13 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
       hearts: heartsRef.current,
     })
     engineRef.current = engine
-
-    // e2e/test hook — lets an autopilot read upcoming obstacles
-    ;(window as unknown as { __awSafari?: SafariEngine }).__awSafari = engine
+    ;(window as unknown as { __awDash?: DashEngine }).__awDash = engine
 
     return () => {
       engine.dispose()
       engineRef.current = null
     }
-  }, [level, attempt])
+  }, [level, attempt, theme])
 
   const startRun = () => {
     engineRef.current?.start()
@@ -131,7 +151,7 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
   }
 
   const nextRun = () => {
-    setLevel(useProgressStore.getState().safariLevel)
+    setLevel(readProgress(theme).level)
     setAttempt((a) => a + 1)
     setOutcome(null)
     setPhase('ready')
@@ -144,24 +164,25 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
   }
 
   const leave = (midRun: boolean) => {
-    if (midRun) useProgressStore.getState().resetSafariStreak()
+    if (midRun) resetStreak(theme)
     onExit()
   }
 
   const streakPips = phase === 'won' && outcome ? outcome.displayStreak : storeStreak
 
   return (
-    <div
-      ref={containerRef}
-      className="absolute inset-0 z-[55] overflow-hidden bg-[#fde68a]"
-    >
-      <canvas ref={canvasRef} className="block size-full touch-none" aria-label="Safari run" />
+    <div ref={containerRef} className="absolute inset-0 z-[55] overflow-hidden bg-[#fde68a]">
+      <canvas
+        ref={canvasRef}
+        className="block size-full touch-none"
+        aria-label={`${theme.title} run`}
+      />
 
       {/* HUD header */}
       <header className="pt-safe px-safe absolute inset-x-0 top-0 flex items-center justify-between gap-2">
         <button
           type="button"
-          aria-label="Back to Kruger Park"
+          aria-label={`Back to ${theme.cityName}`}
           onPointerUp={() => leave(phase === 'running')}
           className="flex size-12 shrink-0 items-center justify-center rounded-full bg-night-navy/60 text-xl text-white backdrop-blur-md active:scale-90"
         >
@@ -180,10 +201,9 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
               ❤️❤️❤️
             </span>
             <span className="rounded-full bg-night-navy/60 px-2.5 py-1 font-display text-base font-bold whitespace-nowrap text-soft-cream backdrop-blur-md">
-              🐾 <span ref={pawCountRef}>0</span>
+              {theme.pickupEmoji} <span ref={pawCountRef}>0</span>
             </span>
           </div>
-          {/* progress to the waterhole */}
           <div className="h-3 w-full overflow-hidden rounded-full bg-night-navy/30">
             <div
               ref={progressFillRef}
@@ -192,7 +212,6 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
             />
           </div>
         </div>
-        {/* streak pips */}
         <div
           className="flex shrink-0 items-center gap-1 rounded-full bg-night-navy/60 px-3 py-2 backdrop-blur-md"
           aria-label={`${streakPips} of ${STREAK_TARGET} runs toward a sticker`}
@@ -207,7 +226,7 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
             />
           ))}
           <span className="pl-0.5 text-base" aria-hidden="true">
-            🦒
+            {theme.titleEmoji}
           </span>
         </div>
       </header>
@@ -245,16 +264,16 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
       {phase === 'ready' && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-night-navy/60 backdrop-blur-sm">
           <div className="animate-bounce-in mx-6 w-full max-w-sm rounded-[2rem] bg-soft-cream p-6 text-center shadow-2xl">
-            <h2 className="font-display text-3xl font-bold text-night-navy">🦁 Safari Dash</h2>
-            <p className="py-2 text-lg font-bold text-night-navy/70">
-              Run to the waterhole! Grab every 🐾 you can.
-            </p>
+            <h2 className="font-display text-3xl font-bold text-night-navy">
+              {theme.titleEmoji} {theme.title}
+            </h2>
+            <p className="py-2 text-lg font-bold text-night-navy/70">{theme.introLine}</p>
             <div className="flex justify-center gap-6 py-3 text-lg font-bold text-night-navy">
               <span>
-                ⬆️ JUMP over 🪨 🪵
+                ⬆️ JUMP over {theme.jumpA} {theme.jumpB}
               </span>
               <span>
-                ⬇️ DUCK under 🦅 🌿
+                ⬇️ DUCK under {theme.duckFlyer} {theme.duckHangs}
               </span>
             </div>
             <Button3D color="emerald" size="xl" block onTap={startRun} ariaLabel="Start running">
@@ -278,12 +297,12 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
                 animationDelay: `${(i % 7) * 0.18}s`,
               }}
             >
-              {CONFETTI[i % CONFETTI.length]}
+              {theme.confetti[i % theme.confetti.length]}
             </span>
           ))}
           <div className="animate-bounce-in mx-6 w-full max-w-sm rounded-[2rem] bg-soft-cream p-6 text-center shadow-2xl">
             <h2 className="font-display text-3xl font-bold text-night-navy">
-              You made it! 🌊
+              You made it! {theme.finishEmojis[2]}
             </h2>
             <div className="py-3 text-4xl" role="img" aria-label={`${outcome.stars} out of 3 stars`}>
               {'⭐'.repeat(outcome.stars)}
@@ -295,36 +314,42 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
               🪙 +{outcome.coins} coins
             </p>
             <p className="pb-1 text-base font-bold text-night-navy/60">
-              {outcome.result.meters}m run · 🐾 ×{outcome.result.paws}
+              {outcome.result.meters}m run · {theme.pickupEmoji} ×{outcome.result.paws}
             </p>
             {outcome.sticker ? (
               <div className="my-3 rounded-2xl bg-emerald-jungle/15 p-4">
                 <p className="animate-float text-5xl">{outcome.sticker.emoji}</p>
                 <p className="pt-1 font-display text-xl font-bold text-emerald-jungle">
-                  New Safari Sticker!
+                  {theme.stickerBannerTitle}
                 </p>
                 <p className="text-base font-bold text-night-navy/60">{outcome.sticker.name}</p>
               </div>
             ) : (
               <p className="pb-2 text-base font-bold text-night-navy/60">
                 {STREAK_TARGET - outcome.displayStreak} more{' '}
-                {STREAK_TARGET - outcome.displayStreak === 1 ? 'run' : 'runs'} for a Safari
-                Sticker! 🦒
+                {STREAK_TARGET - outcome.displayStreak === 1 ? 'run' : 'runs'} for a sticker!{' '}
+                {theme.titleEmoji}
               </p>
             )}
             <div className="flex flex-col gap-3 pt-2">
               <Button3D color="emerald" size="lg" block onTap={nextRun} ariaLabel="Next run">
                 Next Run ▶
               </Button3D>
-              <Button3D color="cream" size="md" block onTap={() => leave(false)} ariaLabel="Back to Kruger Park">
-                Back to Kruger Park
+              <Button3D
+                color="cream"
+                size="md"
+                block
+                onTap={() => leave(false)}
+                ariaLabel={`Back to ${theme.cityName}`}
+              >
+                Back to {theme.cityName}
               </Button3D>
             </div>
           </div>
         </div>
       )}
 
-      {/* Fail overlay — warm, zero-stakes retry */}
+      {/* Fail overlay */}
       {phase === 'failed' && failResult && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-night-navy/70 backdrop-blur-sm">
           <div className="animate-bounce-in mx-6 w-full max-w-sm rounded-[2rem] bg-soft-cream p-6 text-center shadow-2xl">
@@ -333,14 +358,20 @@ export default function SafariDash({ onExit, onReward }: GameScreenProps) {
               Whoops — big tumble!
             </h2>
             <p className="py-2 text-lg font-bold text-night-navy/70">
-              You ran {failResult.meters}m. The waterhole is close — try again!
+              You ran {failResult.meters}m. {theme.finishName} is close — try again!
             </p>
             <div className="flex flex-col gap-3 pt-2">
               <Button3D color="sky" size="lg" block onTap={retryRun} ariaLabel="Try again">
                 Try Again 💪
               </Button3D>
-              <Button3D color="cream" size="md" block onTap={() => leave(false)} ariaLabel="Back to Kruger Park">
-                Back to Kruger Park
+              <Button3D
+                color="cream"
+                size="md"
+                block
+                onTap={() => leave(false)}
+                ariaLabel={`Back to ${theme.cityName}`}
+              >
+                Back to {theme.cityName}
               </Button3D>
             </div>
           </div>

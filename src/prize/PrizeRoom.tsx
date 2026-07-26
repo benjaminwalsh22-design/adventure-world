@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { useRewardsStore } from '../state/useRewardsStore'
 import type { MedalTier } from '../state/useRewardsStore'
 import { stickerEmoji } from './stickerArt'
+import { bookmarkArt } from './bookmarkArt'
 
 /* ---------------------------------------------------------------------------
    View 2 — My Trophy Room.
@@ -86,15 +87,22 @@ export function PrizeRoom() {
             count={bookmarks.length}
             emptyHint="Finish Reading Quests to collect cool bookmarks!"
           >
-            {bookmarks.map((b) => (
-              <div
-                key={b.id}
-                className="animate-pop-in flex aspect-[3/4] flex-col items-center justify-center rounded-xl bg-white text-3xl shadow-inner"
-                title={b.storyTitle}
-              >
-                🔖
-              </div>
-            ))}
+            {bookmarks.map((b) => {
+              const art = bookmarkArt(b.bookmarkKey)
+              return (
+                <div
+                  key={b.id}
+                  className="animate-pop-in flex aspect-[3/5] items-start justify-center pt-2 text-2xl shadow-md"
+                  style={{
+                    background: art.gradient,
+                    clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 84%, 0 100%)',
+                  }}
+                  title={`${b.name} — ${b.storyTitle}`}
+                >
+                  {art.emoji}
+                </div>
+              )
+            })}
           </Shelf>
 
           <Shelf

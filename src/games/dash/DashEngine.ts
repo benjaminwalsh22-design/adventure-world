@@ -1,8 +1,9 @@
 import { haptic } from '../../lib/haptics'
 import { playSfx } from '../../lib/sfx'
+import type { DashTheme } from './themes'
 
 /* ---------------------------------------------------------------------------
-   SafariEngine — 2D canvas side-scroller behind <SafariDash />.
+   DashEngine — themed 2D canvas side-scroller behind <DashGame />.
 
    Same architecture as GlobeScene: React never re-renders during the RAF
    loop. The engine draws the world on canvas and pushes HUD numbers into
@@ -22,13 +23,13 @@ export interface RunResult {
   meters: number
 }
 
-export interface SafariHudRefs {
+export interface DashHudRefs {
   progressFill: HTMLElement | null
   pawCount: HTMLElement | null
   hearts: HTMLElement | null
 }
 
-export interface SafariCallbacks {
+export interface DashCallbacks {
   onFinish: (result: RunResult) => void
   onFail: (result: RunResult) => void
 }
@@ -91,12 +92,12 @@ const NEEDS_JUMP: Record<ObstacleKind, boolean> = {
   branch: false,
 }
 
-export class SafariEngine {
+export class DashEngine {
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
   private container: HTMLElement
-  private callbacks: SafariCallbacks
-  private hud: SafariHudRefs = { progressFill: null, pawCount: null, hearts: null }
+  private callbacks: DashCallbacks
+  private hud: DashHudRefs = { progressFill: null, pawCount: null, hearts: null }
   private config: RunConfig
 
   private rafId = 0
@@ -124,19 +125,23 @@ export class SafariEngine {
   private obstacles: Obstacle[] = []
   private pawItems: Paw[] = []
 
+  private theme: DashTheme
+
   constructor(
     container: HTMLElement,
     canvas: HTMLCanvasElement,
     config: RunConfig,
     attempt: number,
-    callbacks: SafariCallbacks,
+    theme: DashTheme,
+    callbacks: DashCallbacks,
   ) {
     this.container = container
     this.canvas = canvas
     this.config = config
     this.callbacks = callbacks
+    this.theme = theme
     const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('Safari Dash: 2D canvas unavailable')
+    if (!ctx) throw new Error('Dash: 2D canvas unavailable')
     this.ctx = ctx
 
     this.resizeObserver = new ResizeObserver(() => this.handleResize())
@@ -148,7 +153,7 @@ export class SafariEngine {
     this.rafId = requestAnimationFrame(this.tick)
   }
 
-  setHudRefs(refs: SafariHudRefs): void {
+  setHudRefs(refs: DashHudRefs): void {
     this.hud = refs
   }
 
@@ -364,9 +369,9 @@ export class SafariEngine {
 
     /* sky — warm savanna dawn */
     const sky = ctx.createLinearGradient(0, 0, 0, g)
-    sky.addColorStop(0, '#7dd3fc')
-    sky.addColorStop(0.55, '#fde68a')
-    sky.addColorStop(1, '#fdba74')
+    sky.addColorStop(0, this.theme.sky[0])
+    sky.addColorStop(0.55, this.theme.sky[1])
+    sky.addColorStop(1, this.theme.sky[2])
     ctx.fillStyle = sky
     ctx.fillRect(0, 0, W, g)
 
@@ -377,7 +382,7 @@ export class SafariEngine {
     ctx.fill()
 
     /* distant hills (slow parallax) */
-    ctx.fillStyle = '#d9a05b'
+    ctx.fillStyle = this.theme.hillColor
     const hillShift = (this.worldX * 0.15) % (W * 2)
     for (let i = -1; i < 3; i++) {
       const hx = i * W - hillShift + W
@@ -390,15 +395,15 @@ export class SafariEngine {
     this.drawParallaxDecor(g)
 
     /* ground */
-    ctx.fillStyle = '#e7c184'
+    ctx.fillStyle = this.theme.groundColor
     ctx.fillRect(0, g, W, H - g)
-    ctx.fillStyle = '#caa15f'
+    ctx.fillStyle = this.theme.groundStripeColor
     const stripeShift = (this.worldX * 0.9) % 90
     for (let x = -stripeShift; x < W; x += 90) {
       ctx.fillRect(x, g + 26, 48, 6)
     }
     /* grass fringe */
-    ctx.fillStyle = '#a3ba58'
+    ctx.fillStyle = this.theme.grassColor
     ctx.fillRect(0, g - 4, W, 8)
 
     /* paw pickups */
@@ -409,7 +414,7 @@ export class SafariEngine {
       const sx = p.x - this.worldX
       if (sx < -40 || sx > W + 40) continue
       const bob = Math.sin((this.worldX + p.x) / 90) * 4
-      ctx.fillText('🐾', sx, g - p.yOff + bob)
+      ctx.fillText(this.theme.pickupEmoji, sx, g - p.yOff + bob)
     }
 
     /* obstacles */
@@ -427,10 +432,10 @@ export class SafariEngine {
       ctx.ellipse(finishSx, g + 26, 150, 26, 0, 0, Math.PI * 2)
       ctx.fill()
       ctx.font = '40px "Apple Color Emoji", "Noto Color Emoji", sans-serif'
-      ctx.fillText('🦩', finishSx - 60, g - 6)
-      ctx.fillText('🐘', finishSx + 60, g - 2)
+      ctx.fillText(this.theme.finishEmojis[0], finishSx - 60, g - 6)
+      ctx.fillText(this.theme.finishEmojis[1], finishSx + 60, g - 2)
       ctx.font = '30px "Apple Color Emoji", "Noto Color Emoji", sans-serif'
-      ctx.fillText('🌊', finishSx, g + 20)
+      ctx.fillText(this.theme.finishEmojis[2], finishSx, g + 20)
     }
 
     /* player */
@@ -447,12 +452,12 @@ export class SafariEngine {
     for (let i = 0; i < 6; i++) {
       const wx = i * band * 0.7 + 300
       const sx = ((wx - treeShift) % (band * 2) + band * 2) % (band * 2) - 100
-      if (sx > -80 && sx < W + 80) ctx.fillText('🌳', sx, g - 8)
+      if (sx > -80 && sx < W + 80) ctx.fillText(this.theme.treeEmoji, sx, g - 8)
     }
     // background animals amble on a slower layer
     ctx.font = '38px "Apple Color Emoji", "Noto Color Emoji", sans-serif'
     ctx.globalAlpha = 0.85
-    const animals = ['🦒', '🦓', '🐘']
+    const animals = this.theme.bgAnimals
     const aShift = this.worldX * 0.3
     for (let i = 0; i < animals.length; i++) {
       const wx = i * 1100 + 650
@@ -468,16 +473,16 @@ export class SafariEngine {
     switch (o.kind) {
       case 'rock':
         ctx.font = '46px "Apple Color Emoji", "Noto Color Emoji", sans-serif'
-        ctx.fillText('🪨', sx, g + 2)
+        ctx.fillText(this.theme.jumpA, sx, g + 2)
         break
       case 'log':
         ctx.font = '44px "Apple Color Emoji", "Noto Color Emoji", sans-serif'
-        ctx.fillText('🪵', sx, g)
+        ctx.fillText(this.theme.jumpB, sx, g)
         break
       case 'vulture': {
         const bob = Math.sin((o.x + this.worldX * 0.5) / 60) * 6
         ctx.font = '42px "Apple Color Emoji", "Noto Color Emoji", sans-serif'
-        ctx.fillText('🦅', sx, g - 66 + bob)
+        ctx.fillText(this.theme.duckFlyer, sx, g - 66 + bob)
         break
       }
       case 'branch':
@@ -489,7 +494,7 @@ export class SafariEngine {
         ctx.lineTo(sx, g - 108)
         ctx.stroke()
         ctx.font = '46px "Apple Color Emoji", "Noto Color Emoji", sans-serif'
-        ctx.fillText('🌿', sx, g - 78)
+        ctx.fillText(this.theme.duckHangs, sx, g - 78)
         break
     }
   }

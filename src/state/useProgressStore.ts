@@ -21,6 +21,20 @@ interface ProgressState {
   safariStreak: number
   advanceSafari: (opts: { streakAfterRun: number }) => void
   resetSafariStreak: () => void
+
+  jungleLevel: number
+  jungleStreak: number
+  advanceJungle: (opts: { streakAfterRun: number }) => void
+  resetJungleStreak: () => void
+
+  swimRace: number
+  advanceSwim: () => void
+
+  cannonLevel: number
+  advanceCannon: () => void
+
+  completedStories: string[]
+  completeStory: (storyId: string) => void
 }
 
 export const useProgressStore = create<ProgressState>()(
@@ -47,6 +61,31 @@ export const useProgressStore = create<ProgressState>()(
         })),
 
       resetSafariStreak: () => set({ safariStreak: 0 }),
+
+      jungleLevel: 1,
+      jungleStreak: 0,
+
+      advanceJungle: ({ streakAfterRun }) =>
+        set((s) => ({
+          jungleLevel: s.jungleLevel + 1,
+          jungleStreak: streakAfterRun,
+        })),
+
+      resetJungleStreak: () => set({ jungleStreak: 0 }),
+
+      swimRace: 1,
+      advanceSwim: () => set((s) => ({ swimRace: s.swimRace + 1 })),
+
+      cannonLevel: 1,
+      advanceCannon: () => set((s) => ({ cannonLevel: s.cannonLevel + 1 })),
+
+      completedStories: [],
+      completeStory: (storyId) =>
+        set((s) => ({
+          completedStories: s.completedStories.includes(storyId)
+            ? s.completedStories
+            : [...s.completedStories, storyId],
+        })),
     }),
     { name: 'aw:progress:v1', version: 1 },
   ),

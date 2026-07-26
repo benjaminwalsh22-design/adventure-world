@@ -53,7 +53,7 @@ export const GAMES: GameDef[] = [
     rewardType: 'coins',
     rewardLabel: 'Finish puzzles → Coins',
     accent: 'gold',
-    playable: false,
+    playable: true,
     cities: ['rome'],
   },
   {
@@ -64,7 +64,7 @@ export const GAMES: GameDef[] = [
     rewardType: 'medal',
     rewardLabel: 'Win races → Medals',
     accent: 'coral',
-    playable: false,
+    playable: true,
     cities: ['rome'],
   },
   {
@@ -75,7 +75,7 @@ export const GAMES: GameDef[] = [
     rewardType: 'sticker',
     rewardLabel: 'Finish runs → Animated Stickers',
     accent: 'emerald',
-    playable: false,
+    playable: true,
     cities: ['rome'],
   },
   {
@@ -86,7 +86,7 @@ export const GAMES: GameDef[] = [
     rewardType: 'bookmark',
     rewardLabel: 'Finish stories → Bookmarks',
     accent: 'sky',
-    playable: false,
+    playable: true,
     cities: ['rome'],
   },
   {
@@ -97,7 +97,7 @@ export const GAMES: GameDef[] = [
     rewardType: 'coins',
     rewardLabel: 'Pop targets → Coins',
     accent: 'gold',
-    playable: false,
+    playable: true,
     cities: ['rome'],
   },
   {
